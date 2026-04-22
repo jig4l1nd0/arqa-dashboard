@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARQA Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="app-header">
+  <div class="header-icon" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+      <circle cx="12" cy="7" r="4"></circle>
+    </svg>
+  </div>
+  <div class="header-title"><h1>ARQA ATS</h1></div>
+  <div class="header-divider"></div>
+  <span class="week-badge" id="weekBadge"></span>
+</div>
+
+<div class="stats-bar" id="statsBar">
+  <div class="stat-card"><span class="stat-val">—</span><span class="stat-label">Vacantes activas</span></div>
+  <div class="stat-card"><span class="stat-val">—</span><span class="stat-label">Candidatos en pipe</span></div>
+  <div class="stat-card"><span class="stat-val">—</span><span class="stat-label">Con cliente</span></div>
+</div>
+
+<div class="toolbar">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <select class="group-select" id="groupBy">
+      <option value="none">Sin agrupar</option>
+      <option value="owner">Agrupar: Owner</option>
+      <option value="prioridad">Agrupar: Prioridad</option>
+      <option value="cliente">Agrupar: Cliente</option>
+      <option value="status">Agrupar: Status</option>
+    </select>
+    <button class="btn-secondary" onclick="ARQA.openOwners()">⚙ Owners</button>
+  </div>
+  <button class="btn-primary" onclick="ARQA.openNew()">+ Nueva vacante</button>
+</div>
+
+<div class="grid" id="grid">
+  <div class="empty-state"><div class="spinner"></div>Cargando vacantes…</div>
+</div>
+
+<!-- Vacante modal -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-section modal-header">
+      <span class="modal-title" id="mTitle">Vacante</span>
+      <button class="btn-close" onclick="ARQA.closeModal()">✕</button>
+    </div>
+    <div class="modal-section">
+      <div class="section-title">Información general</div>
+      <div class="field"><label>Rol</label><input type="text" id="f-rol" placeholder="Ej. Engineering Manager"></div>
+      <div class="field"><label>Cliente</label><input type="text" id="f-cliente" placeholder="Ej. The Palace Company"></div>
+      <div class="row-3">
+        <div class="field"><label>Owner</label><select id="f-owner"></select></div>
+        <div class="field"><label>Meta semanal</label><input type="number" id="f-meta" min="1" max="20" placeholder="Ej. 3"></div>
+        <div class="field"><label>Estado</label><select id="f-status"><option value="activa">Activa</option><option value="inactiva">Inactiva</option></select></div>
+      </div>
+      <div class="field" style="margin-top:10px">
+        <label>Prioridad</label>
+        <div class="prio-control" id="f-prio-control">
+          <button type="button" class="prio-opt" data-val="">—</button>
+          <button type="button" class="prio-opt" data-val="P0">P0</button>
+          <button type="button" class="prio-opt" data-val="P1">P1</button>
+          <button type="button" class="prio-opt" data-val="P2">P2</button>
+          <button type="button" class="prio-opt" data-val="P3">P3</button>
+          <button type="button" class="prio-opt" data-val="P4">P4</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-section"><div class="section-title">Siguientes pasos</div><div id="ns-container"></div></div>
+    <div class="modal-section"><div class="section-title">Notas</div><div class="field"><textarea id="f-notas" placeholder="Contexto, restricciones, detalles del cliente…"></textarea></div></div>
+    <div class="modal-section"><div class="section-title">Candidatos en pipe</div><div id="cand-container"></div><button class="btn-add-cand" onclick="ARQA.addCand()">+ Agregar candidato</button></div>
+    <div class="modal-section modal-footer">
+      <button class="btn-delete" id="btnDelete" onclick="ARQA.deleteModal()" style="display:none">Eliminar</button>
+      <button class="btn-cancel" onclick="ARQA.closeModal()">Cancelar</button>
+      <button class="btn-save" id="btnSave" onclick="ARQA.saveModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Candidate profile modal -->
+<div class="overlay" id="candOverlay">
+  <div class="modal modal-profile">
+    <div class="modal-section modal-header">
+      <span class="modal-title">Perfil del candidato</span>
+      <button class="btn-close" onclick="ARQA.closeCand()">✕</button>
+    </div>
+    <div id="cand-body"></div>
+    <div class="modal-section modal-footer">
+      <button class="btn-delete" onclick="ARQA.candDelete()">Quitar de vacante</button>
+      <button class="btn-cancel" onclick="ARQA.closeCand()">Cancelar</button>
+      <button class="btn-save" id="cBtnSave" onclick="ARQA.candSave()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Owners modal -->
+<div class="overlay" id="ownersOverlay">
+  <div class="modal">
+    <div id="owners-list-view">
+      <div class="modal-section modal-header">
+        <span class="modal-title">Gestionar owners</span>
+        <button class="btn-close" onclick="ARQA.closeOwners()">✕</button>
+      </div>
+      <div class="modal-section">
+        <div class="section-title">Owners actuales</div>
+        <div class="owner-list" id="owners-list"></div>
+        <button class="btn-add-cand" onclick="ARQA.ownerNew()">+ Nuevo owner</button>
+      </div>
+    </div>
+    <div id="owners-edit-view" style="display:none">
+      <div class="modal-section modal-header">
+        <span class="modal-title" id="oTitle">Editar owner</span>
+        <button class="btn-close" onclick="ARQA.closeOwners()">✕</button>
+      </div>
+      <div class="modal-section">
+        <button class="modal-back" onclick="ARQA.ownerBack()">← Volver</button>
+        <div class="field"><label>Nombre</label><input type="text" id="o-nombre" placeholder="Ej. Denny" maxlength="40"></div>
+        <div class="field"><label>Color</label><div class="color-picker" id="o-color-picker"></div></div>
+      </div>
+      <div class="modal-section modal-footer">
+        <button class="btn-delete" id="oBtnDelete" onclick="ARQA.ownerDelete()" style="display:none">Eliminar</button>
+        <button class="btn-cancel" onclick="ARQA.ownerBack()">Cancelar</button>
+        <button class="btn-save" id="oBtnSave" onclick="ARQA.ownerSave()">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/main.js"></script>
+<script src="/static/modals.js"></script>
+</body>
+</html>
