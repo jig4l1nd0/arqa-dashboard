@@ -483,10 +483,18 @@ def delete_owner(owner_id):
     return jsonify({"success": True})
 
 
+# ── Sync ─────────────────────────────────────────────────────
+@app.route("/api/sync-from-sheets", methods=["POST"])
+def sync_from_sheets():
+    result = sheets.sync_from_sheets()
+    if "error" in result:
+        return jsonify(result), 400
+    return jsonify(result)
+
+
 # ── App init ─────────────────────────────────────────────────
 with app.app_context():
-    if app.config["GOOGLE_SHEET_ID"]:
-        sheets.init_sheets(app)
+    sheets.init_sheets(app)
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run(debug=app.config["DEBUG"], port=5000)
