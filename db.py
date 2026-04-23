@@ -1,83 +1,90 @@
 """PostgreSQL storage backend — same interface as sheets.py."""
 
 import psycopg2
-import psycopg2.extras
 
-_conn = None
+_dsn = None
+
+
+def _conn():
+    conn = psycopg2.connect(_dsn)
+    conn.autocommit = True
+    return conn
 
 
 def init_db(database_url):
-    global _conn
-    _conn = psycopg2.connect(database_url)
-    _conn.autocommit = True
+    global _dsn
+    _dsn = database_url
     _create_tables()
 
 
 def _create_tables():
-    with _conn.cursor() as cur:
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS vacantes (
-                id TEXT PRIMARY KEY,
-                rol TEXT NOT NULL DEFAULT '',
-                cliente TEXT NOT NULL DEFAULT '',
-                owner_id TEXT NOT NULL DEFAULT '',
-                meta TEXT NOT NULL DEFAULT '0',
-                status TEXT NOT NULL DEFAULT 'activa',
-                prioridad TEXT NOT NULL DEFAULT '',
-                temperatura TEXT NOT NULL DEFAULT '',
-                next_steps TEXT NOT NULL DEFAULT '',
-                notas TEXT NOT NULL DEFAULT '',
-                fecha_creacion TEXT NOT NULL DEFAULT '',
-                fecha_actualizacion TEXT NOT NULL DEFAULT ''
-            )
-        """)
-        # Migrate meta column from INTEGER to TEXT if needed
-        cur.execute("""
-            SELECT data_type FROM information_schema.columns
-            WHERE table_name = 'vacantes' AND column_name = 'meta'
-        """)
-        row = cur.fetchone()
-        if row and row[0] == 'integer':
-            cur.execute("ALTER TABLE vacantes ALTER COLUMN meta TYPE TEXT USING meta::TEXT")
-            cur.execute("ALTER TABLE vacantes ALTER COLUMN meta SET DEFAULT '0'")
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS candidatos (
-                id TEXT PRIMARY KEY,
-                nombre TEXT NOT NULL DEFAULT '',
-                email TEXT NOT NULL DEFAULT '',
-                telefono TEXT NOT NULL DEFAULT '',
-                linkedin TEXT NOT NULL DEFAULT '',
-                ciudad TEXT NOT NULL DEFAULT '',
-                anos_experiencia TEXT NOT NULL DEFAULT '',
-                expectativa_salarial TEXT NOT NULL DEFAULT '',
-                fuente TEXT NOT NULL DEFAULT '',
-                originador_id TEXT NOT NULL DEFAULT '',
-                comentarios TEXT NOT NULL DEFAULT '',
-                fecha_creacion TEXT NOT NULL DEFAULT '',
-                fecha_actualizacion TEXT NOT NULL DEFAULT '',
-                cv TEXT NOT NULL DEFAULT ''
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS aplicaciones (
-                id TEXT PRIMARY KEY,
-                candidato_id TEXT NOT NULL DEFAULT '',
-                vacante_id TEXT NOT NULL DEFAULT '',
-                lado TEXT NOT NULL DEFAULT 'ARQA',
-                etapa TEXT NOT NULL DEFAULT '',
-                status TEXT NOT NULL DEFAULT 'En proceso',
-                fecha_aplicacion TEXT NOT NULL DEFAULT '',
-                fecha_actualizacion TEXT NOT NULL DEFAULT ''
-            )
-        """)
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS owners (
-                id TEXT PRIMARY KEY,
-                nombre TEXT NOT NULL DEFAULT '',
-                color TEXT NOT NULL DEFAULT 'slate',
-                fecha_creacion TEXT NOT NULL DEFAULT ''
-            )
-        """)
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS vacantes (
+                    id TEXT PRIMARY KEY,
+                    rol TEXT NOT NULL DEFAULT '',
+                    cliente TEXT NOT NULL DEFAULT '',
+                    owner_id TEXT NOT NULL DEFAULT '',
+                    meta TEXT NOT NULL DEFAULT '0',
+                    status TEXT NOT NULL DEFAULT 'activa',
+                    prioridad TEXT NOT NULL DEFAULT '',
+                    temperatura TEXT NOT NULL DEFAULT '',
+                    next_steps TEXT NOT NULL DEFAULT '',
+                    notas TEXT NOT NULL DEFAULT '',
+                    fecha_creacion TEXT NOT NULL DEFAULT '',
+                    fecha_actualizacion TEXT NOT NULL DEFAULT ''
+                )
+            """)
+            cur.execute("""
+                SELECT data_type FROM information_schema.columns
+                WHERE table_name = 'vacantes' AND column_name = 'meta'
+            """)
+            row = cur.fetchone()
+            if row and row[0] == 'integer':
+                cur.execute("ALTER TABLE vacantes ALTER COLUMN meta TYPE TEXT USING meta::TEXT")
+                cur.execute("ALTER TABLE vacantes ALTER COLUMN meta SET DEFAULT '0'")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS candidatos (
+                    id TEXT PRIMARY KEY,
+                    nombre TEXT NOT NULL DEFAULT '',
+                    email TEXT NOT NULL DEFAULT '',
+                    telefono TEXT NOT NULL DEFAULT '',
+                    linkedin TEXT NOT NULL DEFAULT '',
+                    ciudad TEXT NOT NULL DEFAULT '',
+                    anos_experiencia TEXT NOT NULL DEFAULT '',
+                    expectativa_salarial TEXT NOT NULL DEFAULT '',
+                    fuente TEXT NOT NULL DEFAULT '',
+                    originador_id TEXT NOT NULL DEFAULT '',
+                    comentarios TEXT NOT NULL DEFAULT '',
+                    fecha_creacion TEXT NOT NULL DEFAULT '',
+                    fecha_actualizacion TEXT NOT NULL DEFAULT '',
+                    cv TEXT NOT NULL DEFAULT ''
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS aplicaciones (
+                    id TEXT PRIMARY KEY,
+                    candidato_id TEXT NOT NULL DEFAULT '',
+                    vacante_id TEXT NOT NULL DEFAULT '',
+                    lado TEXT NOT NULL DEFAULT 'ARQA',
+                    etapa TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'En proceso',
+                    fecha_aplicacion TEXT NOT NULL DEFAULT '',
+                    fecha_actualizacion TEXT NOT NULL DEFAULT ''
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS owners (
+                    id TEXT PRIMARY KEY,
+                    nombre TEXT NOT NULL DEFAULT '',
+                    color TEXT NOT NULL DEFAULT 'slate',
+                    fecha_creacion TEXT NOT NULL DEFAULT ''
+                )
+            """)
+    finally:
+        conn.close()
 
 
 # ── Column mappings (sheet col index → db column name) ───────
@@ -111,39 +118,47 @@ _TABLE_NAME = {
 def get_all_rows(sheet_name):
     table = _TABLE_NAME[sheet_name]
     cols = _TABLE_COLS[sheet_name]
-    with _conn.cursor() as cur:
-        cur.execute(f"SELECT {','.join(cols)} FROM {table}")
-        rows = cur.fetchall()
-    return [list(str(v) if v is not None else "" for v in row) for row in rows]
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT {','.join(cols)} FROM {table}")
+            rows = cur.fetchall()
+        return [list(str(v) if v is not None else "" for v in row) for row in rows]
+    finally:
+        conn.close()
 
 
 def find_row_index(sheet_name, col_index, value):
     table = _TABLE_NAME[sheet_name]
     cols = _TABLE_COLS[sheet_name]
     col_name = cols[col_index]
-    with _conn.cursor() as cur:
-        cur.execute(f"SELECT id FROM {table} WHERE {col_name} = %s LIMIT 1", (value,))
-        row = cur.fetchone()
-    # Return a truthy value (the id) or 0 — callers just check truthiness
-    return row[0] if row else 0
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT id FROM {table} WHERE {col_name} = %s LIMIT 1", (value,))
+            row = cur.fetchone()
+        return row[0] if row else 0
+    finally:
+        conn.close()
 
 
 def append_row(sheet_name, row):
     table = _TABLE_NAME[sheet_name]
     cols = _TABLE_COLS[sheet_name]
-    # Pad row if shorter than cols
     padded = list(row) + [""] * (len(cols) - len(row))
     placeholders = ",".join(["%s"] * len(cols))
-    with _conn.cursor() as cur:
-        cur.execute(
-            f"INSERT INTO {table} ({','.join(cols)}) VALUES ({placeholders})",
-            [str(v) for v in padded[:len(cols)]],
-        )
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"INSERT INTO {table} ({','.join(cols)}) VALUES ({placeholders})",
+                [str(v) for v in padded[:len(cols)]],
+            )
+    finally:
+        conn.close()
 
 
 def update_cells(sheet_name, row_num, updates):
-    """updates: dict of {col_index_0based: value}.
-    row_num here is actually the row ID (from find_row_index)."""
     table = _TABLE_NAME[sheet_name]
     cols = _TABLE_COLS[sheet_name]
     sets = []
@@ -154,22 +169,27 @@ def update_cells(sheet_name, row_num, updates):
         vals.append(str(val))
     if not sets:
         return
-    # row_num is the id value from find_row_index
     vals.append(str(row_num))
-    with _conn.cursor() as cur:
-        cur.execute(f"UPDATE {table} SET {','.join(sets)} WHERE id = %s", vals)
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"UPDATE {table} SET {','.join(sets)} WHERE id = %s", vals)
+    finally:
+        conn.close()
 
 
 def delete_row(sheet_name, row_num):
-    """row_num is the id value from find_row_index."""
     table = _TABLE_NAME[sheet_name]
-    with _conn.cursor() as cur:
-        cur.execute(f"DELETE FROM {table} WHERE id = %s", (str(row_num),))
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"DELETE FROM {table} WHERE id = %s", (str(row_num),))
+    finally:
+        conn.close()
 
 
 # ── Sync helpers ─────────────────────────────────────────────
 def export_all():
-    """Return all data as dict of sheet_name → list of rows."""
     result = {}
     for sheet_name in _TABLE_COLS:
         result[sheet_name] = get_all_rows(sheet_name)
@@ -177,17 +197,19 @@ def export_all():
 
 
 def import_all(data):
-    """Replace all DB data with data from sheets.
-    data: dict of sheet_name → list of rows."""
-    for sheet_name, rows in data.items():
-        table = _TABLE_NAME[sheet_name]
-        cols = _TABLE_COLS[sheet_name]
-        with _conn.cursor() as cur:
-            cur.execute(f"DELETE FROM {table}")
-            for row in rows:
-                padded = list(row) + [""] * (len(cols) - len(row))
-                placeholders = ",".join(["%s"] * len(cols))
-                cur.execute(
-                    f"INSERT INTO {table} ({','.join(cols)}) VALUES ({placeholders})",
-                    [str(v) for v in padded[:len(cols)]],
-                )
+    conn = _conn()
+    try:
+        for sheet_name, rows in data.items():
+            table = _TABLE_NAME[sheet_name]
+            cols = _TABLE_COLS[sheet_name]
+            with conn.cursor() as cur:
+                cur.execute(f"DELETE FROM {table}")
+                for row in rows:
+                    padded = list(row) + [""] * (len(cols) - len(row))
+                    placeholders = ",".join(["%s"] * len(cols))
+                    cur.execute(
+                        f"INSERT INTO {table} ({','.join(cols)}) VALUES ({placeholders})",
+                        [str(v) for v in padded[:len(cols)]],
+                    )
+    finally:
+        conn.close()
