@@ -2,6 +2,7 @@
 
 import json
 import re
+import traceback
 import uuid
 from datetime import datetime
 
@@ -12,6 +13,12 @@ from config import Config
 
 app = Flask(__name__)
 app.config.from_object(Config)
+
+
+@app.errorhandler(Exception)
+def handle_error(e):
+    traceback.print_exc()
+    return jsonify({"error": str(e)}), 500
 
 # ── Column index maps (mirrors Schema.gs) ────────────────────
 V_ID, V_ROL, V_CLIENTE, V_OWNER, V_META = 0, 1, 2, 3, 4
