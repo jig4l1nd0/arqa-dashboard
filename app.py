@@ -141,14 +141,18 @@ def _delete_apps_by_vacante(vacante_id):
     rows = sheets.get_all_rows("Aplicaciones")
     for i in range(len(rows) - 1, -1, -1):
         if rows[i][A_VAC] == vacante_id:
-            sheets.delete_row("Aplicaciones", i + 2)
+            row_ref = sheets.find_row_index("Aplicaciones", A_ID, rows[i][A_ID])
+            if row_ref:
+                sheets.delete_row("Aplicaciones", row_ref)
 
 
 def _delete_apps_by_candidato(candidato_id):
     rows = sheets.get_all_rows("Aplicaciones")
     for i in range(len(rows) - 1, -1, -1):
         if rows[i][A_CAND] == candidato_id:
-            sheets.delete_row("Aplicaciones", i + 2)
+            row_ref = sheets.find_row_index("Aplicaciones", A_ID, rows[i][A_ID])
+            if row_ref:
+                sheets.delete_row("Aplicaciones", row_ref)
 
 
 # ── Validation ───────────────────────────────────────────────
