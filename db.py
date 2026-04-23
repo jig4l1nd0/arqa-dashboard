@@ -21,7 +21,7 @@ def _create_tables():
                 rol TEXT NOT NULL DEFAULT '',
                 cliente TEXT NOT NULL DEFAULT '',
                 owner_id TEXT NOT NULL DEFAULT '',
-                meta INTEGER NOT NULL DEFAULT 0,
+                meta TEXT NOT NULL DEFAULT '0',
                 status TEXT NOT NULL DEFAULT 'activa',
                 prioridad TEXT NOT NULL DEFAULT '',
                 temperatura TEXT NOT NULL DEFAULT '',
@@ -31,6 +31,15 @@ def _create_tables():
                 fecha_actualizacion TEXT NOT NULL DEFAULT ''
             )
         """)
+        # Migrate meta column from INTEGER to TEXT if needed
+        cur.execute("""
+            SELECT data_type FROM information_schema.columns
+            WHERE table_name = 'vacantes' AND column_name = 'meta'
+        """)
+        row = cur.fetchone()
+        if row and row[0] == 'integer':
+            cur.execute("ALTER TABLE vacantes ALTER COLUMN meta TYPE TEXT USING meta::TEXT")
+            cur.execute("ALTER TABLE vacantes ALTER COLUMN meta SET DEFAULT '0'")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS candidatos (
                 id TEXT PRIMARY KEY,
