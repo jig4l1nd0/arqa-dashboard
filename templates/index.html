@@ -29,6 +29,7 @@
 
 <div class="toolbar">
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <input type="text" class="search-input" id="searchInput" placeholder="Buscar vacante, cliente, candidato…">
     <select class="group-select" id="groupBy">
       <option value="none">Sin agrupar</option>
       <option value="owner">Agrupar: Owner</option>
@@ -37,6 +38,7 @@
       <option value="status">Agrupar: Status</option>
     </select>
     <button class="btn-secondary" onclick="ARQA.openOwners()">⚙ Owners</button>
+    <button class="btn-secondary" id="viewToggle" onclick="ARQA.toggleView()">▤ Pipeline</button>
   </div>
   <button class="btn-primary" onclick="ARQA.openNew()">+ Nueva vacante</button>
 </div>
@@ -44,6 +46,8 @@
 <div class="grid" id="grid">
   <div class="empty-state"><div class="spinner"></div>Cargando vacantes…</div>
 </div>
+
+<div class="kanban" id="kanban" style="display:none"></div>
 
 <!-- Vacante modal -->
 <div class="overlay" id="overlay">

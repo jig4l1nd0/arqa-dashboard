@@ -4,7 +4,7 @@ var ARQA = (function () {
 
 var state = {
   vacantes: [], owners: [], candidatoFields: [], etapas: [],
-  filter: { group: 'none' },
+  filter: { group: 'none', search: '', view: 'grid' },
   modal: { editingId: null, tempCands: [], tempSteps: [], prio: '' },
   candModal: { aplicacionId: null, candidatoId: null, candidato: {}, aplicacion: {} },
   ownerModal: { editingId: null, color: 'slate' }
@@ -104,7 +104,18 @@ var sel = {
   sorted: function () {
     var so = { 'activa': 0, 'inactiva': 1 };
     var po = { 'P0': 0, 'P1': 1, 'P2': 2, 'P3': 3, 'P4': 4, '': 5 };
-    return state.vacantes.slice().sort(function (a, b) {
+    var items = state.vacantes;
+    var q = state.filter.search.toLowerCase().trim();
+    if (q) {
+      items = items.filter(function (v) {
+        var owner = sel.ownerById(v.ownerId);
+        var haystack = [v.rol, v.cliente, v.notas, v.prioridad, owner.nombre].concat(
+          v.candidatos.map(function (c) { return c.nombre; })
+        ).join(' ').toLowerCase();
+        return haystack.indexOf(q) !== -1;
+      });
+    }
+    return items.slice().sort(function (a, b) {
       var sa = so[a.status] ?? 2, sb = so[b.status] ?? 2;
       if (sa !== sb) return sa - sb;
       return (po[a.prioridad || ''] ?? 5) - (po[b.prioridad || ''] ?? 5);
@@ -148,7 +159,7 @@ var sel = {
 
 // ── Render ───────────────────────────────────────────────────
 var render = {
-  all: function () { render.stats(); render.grid(); },
+  all: function () { render.stats(); if (state.filter.view === 'kanban') render.kanban(); else render.grid(); },
   stats: function () {
     var s = sel.stats();
     document.getElementById('statsBar').innerHTML =
@@ -158,8 +169,13 @@ var render = {
   },
   grid: function () {
     var grid = document.getElementById('grid');
+    var kb = document.getElementById('kanban');
+    grid.style.display = '';
+    kb.style.display = 'none';
     if (!state.vacantes.length) { grid.innerHTML = '<div class="empty-state">Sin vacantes aún.<br>¡Crea la primera con el botón de arriba!</div>'; return; }
     var groups = sel.grouped();
+    var total = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
+    if (!total) { grid.innerHTML = '<div class="empty-state">Sin resultados para "' + esc(state.filter.search) + '"</div>'; return; }
     if (state.filter.group === 'none') { grid.innerHTML = groups[0].items.map(render.card).join(''); return; }
     grid.innerHTML = groups.map(function (g) {
       return '<div class="group-header"><span class="group-title">' + esc(g.label) + '</span><span class="group-count">' + g.items.length + '</span><div class="group-divider"></div></div>' + g.items.map(render.card).join('');
@@ -193,6 +209,40 @@ var render = {
       '<div class="card-meta"><span class="card-cliente">' + esc(v.cliente) + '</span><span class="meta-count">' + cc + ' / ' + v.meta + '</span></div>' +
       '<div class="prog-wrap"><div class="prog-fill ' + p.progClass(pct) + '" style="width:' + pct + '%"></div></div>' +
       '<div class="pipe-label">En pipe</div><div class="cand-list">' + candHtml + '</div>' + p.nextSteps(v.nextSteps) + '</div>';
+  },
+  kanban: function () {
+    var grid = document.getElementById('grid');
+    var kb = document.getElementById('kanban');
+    grid.style.display = 'none';
+    kb.style.display = '';
+    // Collect all candidates across filtered vacantes
+    var items = sel.sorted();
+    var allCands = [];
+    items.forEach(function (v) {
+      var owner = sel.ownerById(v.ownerId);
+      v.candidatos.forEach(function (c) {
+        allCands.push({ id: c.id, nombre: c.nombre, etapa: c.etapa || '', lado: c.lado, rol: v.rol, cliente: v.cliente, ownerColor: owner.color, ownerNombre: owner.nombre });
+      });
+    });
+    kb.innerHTML = state.etapas.map(function (e) {
+      var inCol = allCands.filter(function (c) { return c.etapa === e.key; });
+      var cards = inCol.length ? inCol.map(function (c) {
+        var ladoBadge = '<span class="lado-badge ' + (c.lado === 'Cliente' ? 'lado-c' : 'lado-a') + '">' + (c.lado === 'Cliente' ? 'cliente' : 'ARQA') + '</span>';
+        return '<div class="kanban-card" onclick="ARQA.openCand(\'' + esc(c.id) + '\')">' +
+          '<div class="kanban-card-name">' + esc(c.nombre) + '</div>' +
+          '<div class="kanban-card-meta">' + esc(c.rol) + ' · ' + esc(c.cliente) + '</div>' +
+          '<div class="kanban-card-badges">' + ladoBadge + '<span class="owner-badge bg-' + esc(c.ownerColor) + '">' + esc(c.ownerNombre) + '</span></div></div>';
+      }).join('') : '<div class="kanban-empty">Sin candidatos</div>';
+      return '<div class="kanban-col"><div class="kanban-col-header"><span class="kanban-col-title">' + esc(e.label) + '</span><span class="kanban-col-count">' + inCol.length + '</span></div><div class="kanban-col-body">' + cards + '</div></div>';
+    }).join('');
+    // Also show unassigned column
+    var unassigned = allCands.filter(function (c) { return !c.etapa; });
+    if (unassigned.length) {
+      var uCards = unassigned.map(function (c) {
+        return '<div class="kanban-card" onclick="ARQA.openCand(\'' + esc(c.id) + '\')"><div class="kanban-card-name">' + esc(c.nombre) + '</div><div class="kanban-card-meta">' + esc(c.rol) + ' · ' + esc(c.cliente) + '</div></div>';
+      }).join('');
+      kb.innerHTML = '<div class="kanban-col"><div class="kanban-col-header"><span class="kanban-col-title">Sin asignar</span><span class="kanban-col-count">' + unassigned.length + '</span></div><div class="kanban-col-body">' + uCards + '</div></div>' + kb.innerHTML;
+    }
   }
 };
 /* ARQA Dashboard — modals.js (Part 2: Modal, CandModal, OwnerModal, Init) */
@@ -430,6 +480,11 @@ var ownerModal = {
 // ── Filter listeners & Init ─────────────────────────────────
 function setupFilters() {
   document.getElementById('groupBy').addEventListener('change', function (e) { state.filter.group = e.target.value; render.all(); });
+  var searchTimer;
+  document.getElementById('searchInput').addEventListener('input', function (e) {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function () { state.filter.search = e.target.value; render.all(); }, 150);
+  });
   document.querySelectorAll('#f-prio-control .prio-opt').forEach(function (btn) {
     btn.addEventListener('click', function () { modal.setPrio(btn.dataset.val); });
   });
@@ -454,6 +509,12 @@ return {
   openOwners: ownerModal.open, closeOwners: ownerModal.close,
   ownerNew: ownerModal.newOwner,
   ownerEdit: function (id) { ownerModal.showEdit(state.owners.find(function (o) { return o.id === id; })); },
-  ownerBack: ownerModal.showList, ownerSave: ownerModal.save, ownerDelete: ownerModal.remove, ownerSetColor: ownerModal.setColor
+  ownerBack: ownerModal.showList, ownerSave: ownerModal.save, ownerDelete: ownerModal.remove, ownerSetColor: ownerModal.setColor,
+  toggleView: function () {
+    state.filter.view = state.filter.view === 'grid' ? 'kanban' : 'grid';
+    var btn = document.getElementById('viewToggle');
+    btn.textContent = state.filter.view === 'grid' ? '▤ Pipeline' : '▦ Tarjetas';
+    render.all();
+  }
 };
 })();
