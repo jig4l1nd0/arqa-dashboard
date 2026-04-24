@@ -264,10 +264,15 @@ var render = {
         if (!dragged) return;
         var aplId = dragged.dataset.aplId;
         var newEtapa = body.parentElement.dataset.etapa;
-        // Optimistic update
-        body.appendChild(dragged);
+        // Update local state immediately
+        state.vacantes.forEach(function (v) {
+          v.candidatos.forEach(function (c) {
+            if (c.id === aplId) c.etapa = newEtapa;
+          });
+        });
+        render.all();
         api.updateEtapa(aplId, newEtapa)
-          .then(function () { utils.toast('✓ Etapa actualizada'); api.load(render.all); })
+          .then(function () { utils.toast('✓ Etapa actualizada'); })
           .catch(function (err) { utils.toast('Error: ' + err.message); api.load(render.all); });
       });
     });
