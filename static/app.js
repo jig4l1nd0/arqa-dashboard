@@ -93,6 +93,9 @@ var api = {
     api._json('/api/candidato/' + id, { method: 'DELETE' })
       .then(function () { utils.toast('Candidato eliminado'); candModal.close(); api.load(render.all); })
       .catch(function (e) { utils.toast('Error: ' + e.message); });
+  },
+  updateEtapa: function (aplicacionId, etapa) {
+    return api._json('/api/aplicacion/' + aplicacionId + '/etapa', { method: 'PATCH', body: JSON.stringify({ etapa: etapa }) });
   }
 };
 
@@ -215,7 +218,6 @@ var render = {
     var kb = document.getElementById('kanban');
     grid.style.display = 'none';
     kb.style.display = '';
-    // Collect all candidates across filtered vacantes
     var items = sel.sorted();
     var allCands = [];
     items.forEach(function (v) {
@@ -224,25 +226,51 @@ var render = {
         allCands.push({ id: c.id, nombre: c.nombre, etapa: c.etapa || '', lado: c.lado, rol: v.rol, cliente: v.cliente, ownerColor: owner.color, ownerNombre: owner.nombre });
       });
     });
-    kb.innerHTML = state.etapas.map(function (e) {
+    var cols = [{ key: '', label: 'Sin asignar' }].concat(state.etapas);
+    kb.innerHTML = cols.map(function (e) {
       var inCol = allCands.filter(function (c) { return c.etapa === e.key; });
+      if (e.key === '' && !inCol.length) return '';
       var cards = inCol.length ? inCol.map(function (c) {
         var ladoBadge = '<span class="lado-badge ' + (c.lado === 'Cliente' ? 'lado-c' : 'lado-a') + '">' + (c.lado === 'Cliente' ? 'cliente' : 'ARQA') + '</span>';
-        return '<div class="kanban-card" onclick="ARQA.openCand(\'' + esc(c.id) + '\')">' +
+        return '<div class="kanban-card" draggable="true" data-apl-id="' + esc(c.id) + '" onclick="ARQA.openCand(\'' + esc(c.id) + '\')">' +
           '<div class="kanban-card-name">' + esc(c.nombre) + '</div>' +
           '<div class="kanban-card-meta">' + esc(c.rol) + ' · ' + esc(c.cliente) + '</div>' +
           '<div class="kanban-card-badges">' + ladoBadge + '<span class="owner-badge bg-' + esc(c.ownerColor) + '">' + esc(c.ownerNombre) + '</span></div></div>';
       }).join('') : '<div class="kanban-empty">Sin candidatos</div>';
-      return '<div class="kanban-col"><div class="kanban-col-header"><span class="kanban-col-title">' + esc(e.label) + '</span><span class="kanban-col-count">' + inCol.length + '</span></div><div class="kanban-col-body">' + cards + '</div></div>';
+      return '<div class="kanban-col" data-etapa="' + esc(e.key) + '"><div class="kanban-col-header"><span class="kanban-col-title">' + esc(e.label) + '</span><span class="kanban-col-count">' + inCol.length + '</span></div><div class="kanban-col-body">' + cards + '</div></div>';
     }).join('');
-    // Also show unassigned column
-    var unassigned = allCands.filter(function (c) { return !c.etapa; });
-    if (unassigned.length) {
-      var uCards = unassigned.map(function (c) {
-        return '<div class="kanban-card" onclick="ARQA.openCand(\'' + esc(c.id) + '\')"><div class="kanban-card-name">' + esc(c.nombre) + '</div><div class="kanban-card-meta">' + esc(c.rol) + ' · ' + esc(c.cliente) + '</div></div>';
-      }).join('');
-      kb.innerHTML = '<div class="kanban-col"><div class="kanban-col-header"><span class="kanban-col-title">Sin asignar</span><span class="kanban-col-count">' + unassigned.length + '</span></div><div class="kanban-col-body">' + uCards + '</div></div>' + kb.innerHTML;
-    }
+    render._setupDrag();
+  },
+  _setupDrag: function () {
+    var dragged = null;
+    document.querySelectorAll('.kanban-card[draggable]').forEach(function (card) {
+      card.addEventListener('dragstart', function (e) {
+        dragged = card;
+        card.style.opacity = '0.4';
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      card.addEventListener('dragend', function () {
+        card.style.opacity = '';
+        dragged = null;
+        document.querySelectorAll('.kanban-col-body').forEach(function (b) { b.classList.remove('drag-over'); });
+      });
+    });
+    document.querySelectorAll('.kanban-col-body').forEach(function (body) {
+      body.addEventListener('dragover', function (e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; body.classList.add('drag-over'); });
+      body.addEventListener('dragleave', function () { body.classList.remove('drag-over'); });
+      body.addEventListener('drop', function (e) {
+        e.preventDefault();
+        body.classList.remove('drag-over');
+        if (!dragged) return;
+        var aplId = dragged.dataset.aplId;
+        var newEtapa = body.parentElement.dataset.etapa;
+        // Optimistic update
+        body.appendChild(dragged);
+        api.updateEtapa(aplId, newEtapa)
+          .then(function () { utils.toast('✓ Etapa actualizada'); api.load(render.all); })
+          .catch(function (err) { utils.toast('Error: ' + err.message); api.load(render.all); });
+      });
+    });
   }
 };
 /* ARQA Dashboard — modals.js (Part 2: Modal, CandModal, OwnerModal, Init) */

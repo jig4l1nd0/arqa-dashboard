@@ -494,6 +494,18 @@ def delete_owner(owner_id):
     return jsonify({"success": True})
 
 
+# ── Aplicacion quick update ───────────────────────────────────
+@app.route("/api/aplicacion/<aplicacion_id>/etapa", methods=["PATCH"])
+def update_etapa(aplicacion_id):
+    data = request.get_json()
+    etapa = data.get("etapa", "")
+    row_ref = sheets.find_row_index("Aplicaciones", A_ID, aplicacion_id)
+    if not row_ref:
+        return jsonify({"error": "Aplicacion no encontrada"}), 404
+    sheets.update_cells("Aplicaciones", row_ref, {A_ETAPA: etapa, A_UPDATED: _now()})
+    return jsonify({"success": True})
+
+
 # ── Sync ─────────────────────────────────────────────────────
 @app.route("/api/sync-from-sheets", methods=["POST"])
 def sync_from_sheets():

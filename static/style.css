@@ -260,3 +260,4 @@ body {
 .kanban-card-meta{font-size:10px;color:var(--sub);}
 .kanban-card-badges{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;}
 .kanban-empty{font-size:11px;color:var(--dim);text-align:center;padding:16px 4px;}
+.kanban-col-body.drag-over{background:#e8f5e9;border-radius:var(--radius-sm);}
